@@ -5,6 +5,7 @@ const cors = require('cors')
 
 app.use(express.json());
 app.use(cors());
+app.use(express.static('dist'))
 
 // Custom token to log request body for POST requests
 morgan.token('post-data', (req) => {
