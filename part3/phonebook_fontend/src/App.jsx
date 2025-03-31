@@ -32,8 +32,7 @@ const PersonAll = ({ persons, userDelete }) => (
   <div>
     {persons.map((person, index) =>
       <div key={index}>
-        {person.name}
-        {person.number}
+        {person.name} {person.number}
         <button onClick={() => userDelete(person)}>delete</button>
       </div>)
     }
@@ -99,6 +98,10 @@ const App = () => {
             setNewName('');
             setNewPhone('');
           })
+          .catch(error => {
+            console.log(error.response.data.error)
+            setMessage({ message: error.response.data.error, type: "errorMessage" })
+          })
       } else {
         window.alert('Cancel update !!!')
         }
@@ -122,6 +125,10 @@ const App = () => {
           setMessage({message: `Added ${newName} !!!`, type: "successMessage"});
           setNewName('');
           setNewPhone('');
+        })
+        .catch(error => {
+          console.log(error.response.data.error)
+          setMessage({ message: error.response.data.error, type: "errorMessage" })
         })
     }
   }

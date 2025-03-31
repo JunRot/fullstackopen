@@ -1,112 +1,146 @@
+require('dotenv').config()
 const express = require('express')
 const morgan = require('morgan')
-const app = express()
-const cors = require('cors')
+const Phonebook_Entry = require('./models/pb_entry')
 
-app.use(express.json());
-app.use(cors());
-app.use(express.static('dist'))
+const app = express()
+
+const requestLogger = (req, res, next) => {
+    console.log('Method:', req.method)
+    console.log('Path:  ', req.path)
+    console.log('Body:  ', req.body)
+    console.log('---')
+    next()
+  }
+  
+const errorHandler = (error, req, res, next) => {
+    console.error(error.message)
+  
+    if (error.name === 'CastError') { // This happens when the ID format is invalid
+        return res.status(400).send({ error: 'malformatted id'}) // Respond with a 400 error
+    } else if (error.name === 'ValidationError') {
+        return res.status(400).json({ error: error.message })
+    }
+  
+    next(error)
+}
 
 // Custom token to log request body for POST requests
 morgan.token('post-data', (req) => {
     return req.method === 'POST' ? JSON.stringify(req.body) : '';
-});
+})
 
 // Define a custom Morgan format
 morgan.format('customFormat', ':method :url :status - :response-time ms :post-data');
 
+
+app.use(express.static('dist'))
+app.use(express.json())
+app.use(requestLogger)
 app.use(morgan('customFormat'));
 
-let persons = [
-    {
-        id: "1",
-        name: "Arto Hellas",
-        number: "040-123456"
-    },
-    {
-        id: "2",
-        name: "Ada Lovelace",
-        number: "39-44-5323523"
-    },
-    {
-        id: "3",
-        name: "Dan Abramov",
-        number: "12-43-234345"
-    },
-    {
-        id: "4",
-        name: "Mary Poppendieck",
-        number: "39-23-6423122"
-    }
-];
 
 app.get('/', (req, res) => {
-    res.send('<h1>Hello!</h1>')
-});
+    res.send('<h1>Main page</h1>')
+})
 
 app.get('/api/persons', (req, res) => {
-    res.json(persons)
-});
+    Phonebook_Entry.find({}).then(entries => {
+        res.json(entries)
+    })
+})
+
 
 app.get('/info', (req, res) => {
     const requestTime = new Date().toString();
-    res.send(`
-        <div>Phonebook has info for ${persons.length} people</div>
-        <p>${requestTime}</p>            
-    `)
-});
+    
+    Phonebook_Entry.countDocuments({})
+        .then(count => {
+            console.log('Count databalse: ', count)
+            res.send(`
+                <div>Phonebook has info for ${count} people</div>
+                <p>${requestTime}</p>
+            `)
+    })
+})
 
-app.get('/api/persons/:id', (req, res) => {
-    const id = req.params.id
-    const person = persons.find(person => person.id === id)
 
-    if (person) {
-        res.json(person)
-    } else {
-        res.status(400).end()
-    }
-});
+app.get('/api/persons/:id', (req, res, next) => {
+    Phonebook_Entry.findById(req.params.id).
+        then(entry => {
+            if (entry) {
+                res.json(entry)
+            } else {
+                res.status(404).end()
+            }
+        })
+        .catch(error => next(error))
+})
 
-app.delete('/api/persons/:id', (req, res) => {
-    const id = req.params.id
-    persons = persons.filter(person => person.id !== id)
 
-    res.status(204).end()
-});
+app.delete('/api/persons/:id', (req, res, next) => {
+    Phonebook_Entry.findByIdAndDelete(req.params.id)
+        .then(result => {
+            res.status(204).end()
+        })
+        .catch(error => next(error))
+})
 
-const getRandomInt = () => {
-    return String(Math.floor(Math.random() * 10000));
-};
 
-app.post('/api/persons', (req, res) => {
+app.post('/api/persons', (req, res, next) => {
     const body = req.body
-    const checkName = persons.find(person => person.name === body.name)
+    //const checkName = persons.find(person => person.name === body.name)
 
     if (!body.name || !body.number) {
         return res.status(400).json({
             error: 'name or number is missing'
         })
-    } else {
-        if (checkName) {
-            return res.status(400).json({
-                error: 'name must be unique'
-            })
-        }
     }
-
-    const newPerson = {
+    
+    const entry = new Phonebook_Entry({
         name: body.name,
         number: body.number,
-        id: getRandomInt(),
-    }
+    })
 
-    persons = persons.concat(newPerson)
-    
-    res.json(persons)
-});
+    entry.save()
+        .then(savedEntry => {
+            res.json(savedEntry)
+            console.log('Saved sucessfully')
+        })
+        .catch(error => next(error))
+})
+
+app.put('/api/persons/:id', (req, res, next) => {
+    const { name, number } = req.body
+
+    Phonebook_Entry.findById(req.params.id)
+        .then(entry => {
+            if (!entry) {
+                return res.status(404).end()
+            }
+
+            entry.name = name
+            entry.number = number
+
+            return entry.save().then(updatedEntry => {
+                res.json(updatedEntry)
+            })
+        })
+        .catch(error => next(error))
+})
+
+const unknownEndpoint = (req, res) => {
+    res.status(404).send({ error: 'unknown endpoint' })
+  }
+
+// handler of requests with unknown endpoint
+app.use(unknownEndpoint)
+
+// handler of requests with result to errors
+app.use(errorHandler)
 
 
-const PORT = process.env.PORT || 3001
+const PORT = process.env.PORT
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`)
-});
+})
